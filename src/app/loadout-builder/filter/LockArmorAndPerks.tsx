@@ -143,7 +143,7 @@ export default memo(function LockArmorAndPerks({
               <LockedModIcon
                 key={getModRenderKey(mod, modCounts)}
                 mod={mod}
-                onClosed={() => onModClicked(mod)}
+                onModClicked={() => onModClicked(mod)}
               />
             ))}
           </div>
