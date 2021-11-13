@@ -80,7 +80,6 @@ export default function LoadoutDrawerContents(
     buckets,
     items,
     stores,
-    itemSortOrder,
     equip,
     remove,
     add,
@@ -94,7 +93,6 @@ export default function LoadoutDrawerContents(
     buckets: InventoryBuckets;
     stores: DimStore[];
     items: DimItem[];
-    itemSortOrder: string[];
     equip(item: DimItem, e: React.MouseEvent): void;
     remove(item: DimItem, e: React.MouseEvent): void;
     add(item: DimItem, e?: MouseEvent, equip?: boolean): void;
@@ -177,7 +175,6 @@ export default function LoadoutDrawerContents(
             bucket={bucket}
             loadoutItems={loadout.items}
             items={itemsByBucket[bucket.hash] || []}
-            itemSortOrder={itemSortOrder}
             pickLoadoutItem={(bucket) => pickLoadoutItem(loadout, bucket, add)}
             equip={equip}
             remove={remove}

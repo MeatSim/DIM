@@ -7,9 +7,9 @@ import UserGuideLink from 'app/dim-ui/UserGuideLink';
 import { t } from 'app/i18next-t';
 import { PluggableInventoryItemDefinition } from 'app/inventory/item-types';
 import { isPluggableItem } from 'app/inventory/store/sockets';
+import { editLoadout } from 'app/loadout-drawer/loadout-events';
 import { Loadout } from 'app/loadout-drawer/loadout-types';
 import { loadoutFromEquipped, newLoadout } from 'app/loadout-drawer/loadout-utils';
-import { editLoadout } from 'app/loadout-drawer/LoadoutDrawer';
 import { loadoutsSelector } from 'app/loadout-drawer/selectors';
 import { d2ManifestSelector, useD2Definitions } from 'app/manifest/selectors';
 import { showNotification } from 'app/notifications/notifications';
@@ -62,6 +62,7 @@ interface StoreProps {
   searchFilter: ItemFilter;
   searchQuery: string;
   halfTierMods: PluggableInventoryItemDefinition[];
+  disabledDueToMaintenance: boolean;
 }
 
 type Props = ProvidedProps & StoreProps;
@@ -140,12 +141,17 @@ function mapStateToProps() {
     }
   );
 
+  const disabledDueToMaintenanceSelector = createSelector(allItemsSelector, (items) =>
+    items.some((item) => item.missingSockets)
+  );
+
   return (state: RootState): StoreProps => ({
     items: itemsSelector(state),
     loadouts: loadoutsSelector(state),
     searchFilter: searchFilterSelector(state),
     searchQuery: querySelector(state),
     halfTierMods: halfTierModsSelector(state),
+    disabledDueToMaintenance: disabledDueToMaintenanceSelector(state),
   });
 }
 
@@ -162,6 +168,7 @@ function LoadoutBuilder({
   searchQuery,
   halfTierMods,
   initialLoadoutParameters,
+  disabledDueToMaintenance,
 }: Props) {
   const defs = useD2Definitions()!;
   const [
@@ -254,7 +261,8 @@ function LoadoutBuilder({
     lockItemEnergyType,
     statOrder,
     statFilters,
-    lockedExoticHash === LOCKED_EXOTIC_ANY_EXOTIC
+    lockedExoticHash === LOCKED_EXOTIC_ANY_EXOTIC,
+    disabledDueToMaintenance
   );
 
   // A representation of the current loadout optimizer parameters that can be saved with generated loadouts
@@ -304,6 +312,10 @@ function LoadoutBuilder({
   // I dont think this can actually happen?
   if (!selectedStore) {
     return null;
+  }
+
+  if (disabledDueToMaintenance) {
+    return <div className={styles.disabled}>{t('LoadoutBuilder.DisabledDueToMaintenance')}</div>;
   }
 
   const menuContent = (
@@ -398,7 +410,7 @@ function LoadoutBuilder({
         {filteredSets && (
           <GeneratedSets
             sets={filteredSets}
-            lockedMods={lockedMods}
+            lockedMods={processing ? [] : lockedMods}
             pinnedItems={pinnedItems}
             selectedStore={selectedStore}
             lbDispatch={lbDispatch}

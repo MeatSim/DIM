@@ -3,8 +3,13 @@ import { startFarming } from 'app/farming/actions';
 import { t } from 'app/i18next-t';
 import { InventoryBuckets } from 'app/inventory/inventory-buckets';
 import { DimItem } from 'app/inventory/item-types';
-import { allItemsSelector, bucketsSelector, storesSelector } from 'app/inventory/selectors';
-import { editLoadout } from 'app/loadout-drawer/LoadoutDrawer';
+import {
+  allItemsSelector,
+  bucketsSelector,
+  hasClassifiedSelector,
+  storesSelector,
+} from 'app/inventory/selectors';
+import { editLoadout } from 'app/loadout-drawer/loadout-events';
 import MaxlightButton from 'app/loadout-drawer/MaxlightButton';
 import { ItemFilter } from 'app/search/filter-types';
 import { RootState, ThunkDispatchProp } from 'app/store/types';
@@ -16,7 +21,7 @@ import { connect } from 'react-redux';
 import { createSelector } from 'reselect';
 import { DimStore } from '../inventory/store-types';
 import { showNotification } from '../notifications/notifications';
-import { searchFilterSelector } from '../search/search-filter';
+import { filteredItemsSelector, searchFilterSelector } from '../search/search-filter';
 import {
   addIcon,
   AppIcon,
@@ -35,8 +40,8 @@ import { queueAction } from '../utils/action-queue';
 import {
   gatherEngramsLoadout,
   itemLevelingLoadout,
+  itemMoveLoadout,
   randomLoadout,
-  searchLoadout,
 } from './auto-loadouts';
 import { applyLoadout } from './loadout-apply';
 import './loadout-popup.scss';
@@ -72,20 +77,12 @@ interface StoreProps {
   buckets: InventoryBuckets;
   searchFilter: ItemFilter;
   allItems: DimItem[];
+  filteredItems: DimItem[];
 }
 
 type Props = ProvidedProps & StoreProps & ThunkDispatchProp;
 
 function mapStateToProps() {
-  /** Does the user have an classified items? */
-  const hasClassifiedSelector = createSelector(allItemsSelector, (allItems) =>
-    allItems.some(
-      (i) =>
-        i.classified &&
-        (i.location.sort === 'Weapons' || i.location.sort === 'Armor' || i.type === 'Ghost')
-    )
-  );
-
   const loadoutsForPlatform = createSelector(
     loadoutsSelector,
     (_state: RootState, { dimStore }: ProvidedProps) => dimStore,
@@ -114,6 +111,7 @@ function mapStateToProps() {
       buckets: bucketsSelector(state)!,
       hasClassified: hasClassifiedSelector(state),
       allItems: allItemsSelector(state),
+      filteredItems: filteredItemsSelector(state),
     };
   };
 }
@@ -131,6 +129,7 @@ function LoadoutPopup({
   searchFilter,
   buckets,
   allItems,
+  filteredItems,
   dispatch,
 }: Props) {
   // For the most part we don't need to memoize this - this menu is destroyed when closed
@@ -139,9 +138,7 @@ function LoadoutPopup({
     dimStore.destinyVersion === 2 ? pullablePostmasterItems(dimStore, stores).length : 0;
   const numPostmasterItemsTotal = totalPostmasterItems(dimStore);
 
-  const makeNewLoadout = () => {
-    editLoadout(newLoadout('', []), { isNew: true });
-  };
+  const makeNewLoadout = () => editLoadout(newLoadout('', []), { isNew: true });
 
   const newLoadoutFromEquipped = () => {
     const items = dimStore.items.filter(
@@ -158,9 +155,7 @@ function LoadoutPopup({
 
   // TODO: move all these fancy loadouts to a new service
 
-  const onApplyLoadout = (loadout: Loadout, e: React.MouseEvent, filterToEquipped = false) => {
-    e.preventDefault();
-
+  const applySavedLoadout = (loadout: Loadout, { filterToEquipped = false } = {}) => {
     if (filterToEquipped) {
       loadout = filterLoadoutToEquipped(loadout);
     }
@@ -168,17 +163,14 @@ function LoadoutPopup({
     dispatch(applyLoadout(dimStore, loadout, { allowUndo: true, onlyMatchingClass: true }));
   };
 
-  // A dynamic loadout set up to level weapons and armor
-  const makeItemLevelingLoadout = (e: React.MouseEvent) => {
+  // A D1 dynamic loadout set up to level weapons and armor
+  const makeItemLevelingLoadout = () => {
     const loadout = itemLevelingLoadout(allItems, dimStore);
-    onApplyLoadout(loadout, e);
+    dispatch(applyLoadout(dimStore, loadout, { allowUndo: true }));
   };
 
-  // A dynamic loadout set up to level weapons and armor
-  const applyGatherEngramsLoadout = (
-    e: React.MouseEvent,
-    options: { exotics: boolean } = { exotics: false }
-  ) => {
+  // A D1 dynamic loadout set up to grab engrams from inventory
+  const applyGatherEngramsLoadout = (options: { exotics: boolean } = { exotics: false }) => {
     let loadout;
     try {
       loadout = gatherEngramsLoadout(allItems, options);
@@ -186,7 +178,7 @@ function LoadoutPopup({
       showNotification({ type: 'warning', title: t('Loadouts.GatherEngrams'), body: e.message });
       return;
     }
-    onApplyLoadout(loadout, e);
+    dispatch(applyLoadout(dimStore, loadout, { allowUndo: true }));
   };
 
   const applyRandomLoadout = (e: React.MouseEvent, weaponsOnly = false) => {
@@ -209,7 +201,7 @@ function LoadoutPopup({
         weaponsOnly ? (i) => i.bucket?.sort === 'Weapons' && searchFilter(i) : searchFilter
       );
       if (loadout) {
-        onApplyLoadout(loadout, e);
+        dispatch(applyLoadout(dimStore, loadout, { allowUndo: true }));
       }
     } catch (e) {
       showNotification({ type: 'warning', title: t('Loadouts.Random'), body: e.message });
@@ -218,9 +210,9 @@ function LoadoutPopup({
   };
 
   // Move items matching the current search. Max 9 per type.
-  const applySearchLoadout = (e: React.MouseEvent) => {
-    const loadout = searchLoadout(allItems, dimStore, searchFilter);
-    onApplyLoadout(loadout, e);
+  const applySearchLoadout = () => {
+    const loadout = itemMoveLoadout(filteredItems, dimStore);
+    dispatch(applyLoadout(dimStore, loadout, { allowUndo: true }));
   };
 
   const doMakeRoomForPostmaster = () =>
@@ -328,11 +320,11 @@ function LoadoutPopup({
 
         {dimStore.destinyVersion === 1 && (
           <li className="loadout-set">
-            <span onClick={(e) => applyGatherEngramsLoadout(e, { exotics: true })}>
+            <span onClick={() => applyGatherEngramsLoadout({ exotics: true })}>
               <AppIcon icon={engramIcon} />
               <span>{t('Loadouts.GatherEngrams')}</span>
             </span>
-            <span onClick={(e) => applyGatherEngramsLoadout(e, { exotics: false })}>
+            <span onClick={() => applyGatherEngramsLoadout({ exotics: false })}>
               <AppIcon icon={banIcon} /> <span>{t('Loadouts.GatherEngramsExceptExotics')}</span>
             </span>
           </li>
@@ -342,12 +334,12 @@ function LoadoutPopup({
           <li className="loadout-set">
             <span
               title={previousLoadout.name}
-              onClick={(e) => onApplyLoadout(previousLoadout, e, true)}
+              onClick={() => applySavedLoadout(previousLoadout, { filterToEquipped: true })}
             >
               <AppIcon icon={undoIcon} />
               {previousLoadout.name}
             </span>
-            <span onClick={(e) => onApplyLoadout(previousLoadout, e)}>
+            <span onClick={() => applySavedLoadout(previousLoadout)}>
               <span>{t('Loadouts.RestoreAllItems')}</span>
             </span>
           </li>
@@ -355,9 +347,13 @@ function LoadoutPopup({
 
         {loadouts.map((loadout) => (
           <li key={loadout.id} className="loadout-set">
-            <span title={loadout.name} onClick={(e) => onApplyLoadout(loadout, e)}>
+            <span title={loadout.name} onClick={() => applySavedLoadout(loadout)}>
               {isMissingItems(allItems, loadout) && (
-                <AppIcon className="warning-icon" icon={faExclamationTriangle} />
+                <AppIcon
+                  className="warning-icon"
+                  icon={faExclamationTriangle}
+                  title={t('Loadouts.MissingItemsWarning')}
+                />
               )}
               <ClassIcon className="loadout-type-icon" classType={loadout.classType} />
               {loadout.name}

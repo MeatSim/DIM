@@ -1,5 +1,4 @@
-import { DestinyAccount } from 'app/accounts/destiny-account';
-import { currentAccountSelector } from 'app/accounts/selectors';
+import { currentAccountSelector, hasD1AccountSelector } from 'app/accounts/selectors';
 import { settingsSelector } from 'app/dim-api/selectors';
 import ClassIcon from 'app/dim-ui/ClassIcon';
 import { StatTotalToggle } from 'app/dim-ui/CustomStatTotal';
@@ -9,19 +8,17 @@ import { clearAllNewItems } from 'app/inventory/actions';
 import { itemTagList } from 'app/inventory/dim-item-info';
 import NewItemIndicator from 'app/inventory/NewItemIndicator';
 import { sortedStoresSelector } from 'app/inventory/selectors';
-import { DimStore } from 'app/inventory/store-types';
 import { useLoadStores } from 'app/inventory/store/hooks';
 import WishListSettings from 'app/settings/WishListSettings';
 import { useIsPhonePortrait } from 'app/shell/selectors';
 import DimApiSettings from 'app/storage/DimApiSettings';
-import { RootState, ThunkDispatchProp } from 'app/store/types';
+import { useThunkDispatch } from 'app/store/thunk-dispatch';
 import { errorLog } from 'app/utils/log';
 import i18next from 'i18next';
-import exampleArmorImage from 'images/example-armor.jpg';
 import exampleWeaponImage from 'images/example-weapon.jpg';
 import _ from 'lodash';
 import React from 'react';
-import { connect } from 'react-redux';
+import { useSelector } from 'react-redux';
 import ErrorBoundary from '../dim-ui/ErrorBoundary';
 import InventoryItem from '../inventory/InventoryItem';
 import { DimItem } from '../inventory/item-types';
@@ -36,22 +33,6 @@ import Select, { mapToOptions } from './Select';
 import './settings.scss';
 import SortOrderEditor, { SortProperty } from './SortOrderEditor';
 import Spreadsheets from './Spreadsheets';
-
-interface StoreProps {
-  currentAccount?: DestinyAccount;
-  settings: Settings;
-  stores: DimStore[];
-}
-
-function mapStateToProps(state: RootState): StoreProps {
-  return {
-    settings: settingsSelector(state),
-    stores: sortedStoresSelector(state),
-    currentAccount: currentAccountSelector(state),
-  };
-}
-
-type Props = StoreProps & ThunkDispatchProp;
 
 const fakeWeapon = {
   icon: `~${exampleWeaponImage}`,
@@ -75,26 +56,6 @@ const fakeWeapon = {
   destinyVersion: 2,
 };
 
-const fakeArmor = {
-  icon: `~${exampleArmorImage}`,
-  quality: {
-    min: 96,
-  },
-  isNew: true,
-  location: {
-    type: 'energy',
-  },
-  bucket: {
-    type: 'energy',
-  },
-  visible: true,
-  primStat: {
-    value: 300,
-  },
-  itemCategoryHashes: [],
-  destinyVersion: 1,
-};
-
 const languageOptions = mapToOptions({
   de: 'Deutsch',
   en: 'English',
@@ -114,7 +75,12 @@ const languageOptions = mapToOptions({
 // This state is outside the settings page because the settings loses its
 let languageChanged = false;
 
-function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
+export default function SettingsPage() {
+  const dispatch = useThunkDispatch();
+  const settings = useSelector(settingsSelector);
+  const stores = useSelector(sortedStoresSelector);
+  const currentAccount = useSelector(currentAccountSelector);
+  const hasD1Account = useSelector(hasD1AccountSelector);
   const isPhonePortrait = useIsPhonePortrait();
   useLoadStores(currentAccount);
   const setSetting = useSetSetting();
@@ -135,6 +101,10 @@ function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
     } else {
       setSetting(e.target.name as keyof Settings, e.target.value);
     }
+  };
+
+  const onChangePerkList: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    setSetting('perkList', e.target.value === 'true');
   };
 
   const onBadgePostmasterChanged = (checked: boolean, name: keyof Settings) => {
@@ -228,11 +198,10 @@ function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
   );
 
   const menuItems = _.compact([
-    { id: 'general', title: t('Settings.General') },
+    { id: 'general', title: t('Settings.Language') },
     { id: 'items', title: t('Settings.Items') },
     { id: 'inventory', title: t('Settings.Inventory') },
     $featureFlags.wishLists ? { id: 'wishlist', title: t('WishListRoll.Header') } : undefined,
-    { id: 'ratings', title: t('Settings.Ratings') },
     { id: 'storage', title: t('Storage.MenuTitle') },
     { id: 'spreadsheets', title: t('Settings.Data') },
   ]);
@@ -258,7 +227,7 @@ function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
         <h1>{t('Settings.Settings')}</h1>
         <form>
           <section id="general">
-            <h2>{t('Settings.General')}</h2>
+            <h2>{t('Settings.Language')}</h2>
             <div className="setting">
               <Select
                 label={t('Settings.Language')}
@@ -345,6 +314,39 @@ function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
                 )}
               </div>
             </div>
+            <div className="setting">
+              <label>{t('Settings.PerkDisplay')}</label>
+              <div className="radioOptions">
+                <label>
+                  <input
+                    type="radio"
+                    name="perkDisplay"
+                    checked={settings.perkList}
+                    value="true"
+                    onChange={onChangePerkList}
+                  />
+                  <span>{t('Settings.PerkList')}</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="perkDisplay"
+                    checked={!settings.perkList}
+                    value="false"
+                    onChange={onChangePerkList}
+                  />
+                  <span>{t('Settings.PerkGrid')}</span>
+                </label>
+              </div>
+            </div>
+            {hasD1Account && (
+              <Checkbox
+                label={t('Settings.EnableAdvancedStats')}
+                name="itemQuality"
+                value={settings.itemQuality}
+                onChange={onCheckChange}
+              />
+            )}
           </section>
 
           <section id="inventory">
@@ -449,21 +451,6 @@ function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
 
           {$featureFlags.wishLists && <WishListSettings />}
 
-          <section id="ratings">
-            <h2>{t('Settings.Ratings')}</h2>
-            <div className="examples sub-bucket">
-              <InventoryItem item={fakeWeapon as unknown as DimItem} isNew={true} />
-              <InventoryItem item={fakeArmor as unknown as DimItem} isNew={true} />
-            </div>
-
-            <Checkbox
-              label={t('Settings.EnableAdvancedStats')}
-              name="itemQuality"
-              value={settings.itemQuality}
-              onChange={onCheckChange}
-            />
-          </section>
-
           <ErrorBoundary name="StorageSettings">
             <DimApiSettings />
           </ErrorBoundary>
@@ -474,8 +461,6 @@ function SettingsPage({ settings, stores, currentAccount, dispatch }: Props) {
     </PageWithMenu>
   );
 }
-
-export default connect<StoreProps>(mapStateToProps)(SettingsPage);
 
 function isInputElement(element: HTMLElement): element is HTMLInputElement {
   return element.nodeName === 'INPUT';

@@ -409,6 +409,8 @@ module.exports = (env) => {
         '$featureFlags.loadoutModAssignments': JSON.stringify(!env.release),
         // Enable the subclass drawer in loadouts
         '$featureFlags.loadoutSubclasses': JSON.stringify(env.dev),
+        // Top level loadouts page
+        '$featureFlags.loadoutsPage': JSON.stringify(env.dev),
       }),
 
       new LodashModuleReplacementPlugin({
