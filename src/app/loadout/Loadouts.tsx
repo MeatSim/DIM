@@ -192,7 +192,7 @@ function LoadoutRow({
     return [equippableItems, subClass, warnitems];
   }, [loadout.items, defs, allItems, store]);
 
-  const savedMods = getModsFromLoadout(defs, loadout.parameters?.mods);
+  const savedMods = getModsFromLoadout(defs, loadout);
   const equippedItemIds = new Set(loadout.items.filter((i) => i.equipped).map((i) => i.id));
 
   const categories = _.groupBy(items, (i) => i.bucket.sort);
@@ -272,9 +272,9 @@ function LoadoutRow({
                 loadout={loadout}
               />
             ))}
-            {savedMods.armorMods.length > 0 ? (
+            {savedMods.length > 0 ? (
               <div className={styles.mods}>
-                {savedMods.armorMods.map((mod, index) => (
+                {savedMods.map((mod, index) => (
                   <div key={index}>
                     <SocketDetailsMod itemDef={mod} />
                   </div>

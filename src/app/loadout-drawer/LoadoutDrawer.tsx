@@ -258,7 +258,6 @@ export default function LoadoutDrawer() {
                 items={items}
                 buckets={buckets}
                 stores={stores}
-                onUpdateMods={onUpdateMods}
                 equip={onEquipItem}
                 remove={onRemoveItem}
                 add={onAddItem}
